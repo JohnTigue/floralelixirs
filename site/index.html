@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <style>
+      .states {
+        fill: #ddd;
+        stroke: #fff;
+	stroke-width:1px;
+        }
+
+      .states.active {
+        fill: Crimson; 
+        NOT_fill: SteelBlue; 
+        }
+      
+      .locations {
+	fill: Black;
+	opacity:0.4;
+        }
+
+      .location {
+        padding:3px;
+        }
+      
+      .stage {
+        border: 1px black solid;
+        }
+      
+      div.tooltip a {
+        text-decoration: none;
+        color: rgb(10,10,10);
+        }
+
+      .popupTitle {
+        background: rgba(90,90,90, 0.85);	
+        font-weight: bolder;
+        font-size: 1.25em;
+        padding: 12px;
+        /*color: rgb(222,222,222);*/
+        color: rgb(255,255,255);
+        }
+       
+      .popupBody {
+        background: rgb(175,175,175);
+        padding: 12px;
+	opacity:1.0;
+        /*color: rgb(222,222,222);*/
+        }
+       
+      div.tooltip {	
+        position: absolute;			
+        text-align: center;			
+        /* width: 60px;					
+        height: 28px; */					
+        margin: 10px;				
+        padding: 0px;
+        font: 12px sans-serif;		
+        NOTbackground: lightsteelblue;	
+        background: rgb(255,255,255);	
+        border: 0px rgb(70,70,70) solid;		
+        border-radius: 20px;			
+        NOTpointer-events: none;			
+        }
+    </style>
+
+  </head>
+  <body>
+    <script src="http://d3js.org/d3.v4.min.js"></script>
+
+    <!--
+    <script src="https://d3js.org/d3-array.v1.min.js"></script>
+    <script src="https://d3js.org/d3-array.v1.min.js"></script>
+    <script src="https://d3js.org/d3-geo.v1.min.js"></script>    
+    <script src="https://d3js.org/d3-selection.v1.min.js"></script>    
+    <script src="https://d3js.org/d3-collection.v1.min.js"></script>
+    <script src="https://d3js.org/d3-dispatch.v1.min.js"></script>
+    <script src="https://d3js.org/d3-request.v1.min.js"></script>    
+
+    -->
+    <script src="https://d3js.org/topojson.v1.min.js"></script>
+    <script src="https://d3js.org/d3-queue.v1.min.js"></script>
+    <script src="https://d3js.org/d3-scale.v1.min.js"></script>
+    
+    <script>
+      var width = 960,
+          height = 500;
+
+      var projection = d3.geoAlbersUsa();
+      var path = d3.geoPath()
+                   .projection(projection);
+      
+      var svg = d3.select("body")
+                  .append('div')
+                    .attr("align","center")
+                    .attr("width","100%")
+                  .append("svg")
+                    .attr('align', 'center')
+                    .attr("width", width)
+                    .attr("height", height)
+                    .attr("class", "stage");				
+
+      var radius = d3.scaleSqrt()
+            .domain([0, 1e6])
+            .range([0, 10]);
+
+      //var color = d3.schemeCategory20;
+      var color = d3.scaleOrdinal(d3.schemeCategory20);
+      //var color = d3.scale.category20();
+
+      // Define the div for the tooltip http://bl.ocks.org/d3noob/a22c42db65eb00d4e369
+      var tooltipDiv = d3.select("body").append("div")	
+        .attr("class", "tooltip")				
+        .style("opacity", 0)
+        .on('mouseover', function(d, i) {
+          tooltipDiv.transition()		
+            .duration(200)		
+            .style("opacity", .95);		
+            })
+        .on('mouseout', function(d, i) {
+          tooltipDiv.transition()		
+            .duration(1500)		
+            .style("opacity", 0);	
+            });
+      
+      queue()
+	.defer(d3.json, 'us.json') // topo arcs of 50 states
+        .defer(d3.json, 'us-state-centroids.json') // for hover? Don't think this is used TODO
+        .defer(d3.json, 'elixir_locations.json') // list of locations
+        .await(onDataReady);
+
+      var locsByState = {};
+      
+      function onDataReady(err, us, stateCentroids, locations){
+        //alert('yo');
+        var states = topojson.feature(us, us.objects.states).features,
+        neighbors = topojson.neighbors(us.objects.states.geometries);
+        //console.log(states.length); // 53
+
+        // Index locations by state
+        console.log('locs cnt:' + locations.features.length);
+        locations.features.forEach((aFeature) => {
+          var aState = aFeature.properties.state;
+          if(!locsByState[aState]) locsByState[aState] = [];
+          locsByState[aState].push(aFeature.properties);
+          });
+
+        svg.selectAll("states")
+           .data(states)
+           .enter().insert("path", ".graticule")
+           .attr("class", "states")
+           .attr("d", path)
+           //.style("fill", function(d, i) { return color(d.color = d3.max(neighbors[i], function(n) { return states[n].color; }) + 1 | 0); })
+           //.style("fill", function(d, i) { return d.id == NEXTID ? 'green' : ''; })
+           .on('mouseover', function(d, i) {
+             //console.log(d.id);
+             if( renderLocationsListForState(d) === '' ) return;
+             d3.select(this)
+               //.attr('fill', '') // Un-sets the "explicit" fill (might need to be null instead of '')
+               .classed("active", true ) // should then accept fill from CSS
+             //var currentState = this;
+             //d3.select(this).style('fill-opacity', 1);
+             tooltipDiv.transition()		
+                       .duration(200)		
+                       .style("opacity", .95);		
+             tooltipDiv.html(renderLocationsListForState(d))	
+      .style("left", (d3.event.pageX + 30) + "px")		
+                       .style("top", (d3.event.pageY - 28) + "px");	
+             })
+           .on('mouseout', function(d, i) {
+             d3.select(this)
+               .classed("active", false);
+               //.attr('fill', function(d) { return z(d.count_shipments); }) // Re-sets the "explicit" fill
+             //d3.selectAll('path')
+             //  .style({
+             //    'fill-opacity':.7
+             //    });
+             tooltipDiv.transition()		
+                       .duration(1500)		
+                       .style("opacity", 0);	
+
+             });
+
+        // Next, place locations on screen
+        svg.selectAll('.locations')
+	   .data(locations.features)
+	   .enter()
+           .append('path')
+	   .attr('d', path.pointRadius(3))
+           .attr('class', 'locations');
+        }
+
+    function renderLocationsListForState(d,i, nodes){
+      //console.log(this);
+      if(!d) {console.log('d undefined and i = ' + i); return '';};  
+      //console.log(arguments);
+      //console.log('aStateCode=' + lookupStateCode(d.id));
+      let aStatesLocations = locsByState[lookupStateCode(d.id)];
+
+      if(!aStatesLocations) {console.log('null locs'); return '';}
+
+      let rendering = '<div><div class="popupTitle">' + stateNames[d.id].toUpperCase() + '</div><div class="popupBody">';
+      aStatesLocations.forEach((aLoc) => {
+        rendering += '<div class="location"><nobr><a href="http://' + aLoc.website + '" target="_blank" >' + aLoc.bizName + ', ' + aLoc.city + '</a></nobr></div>';
+        console.log(rendering);
+      /*
+        streetAddr: aLoc.Street1,
+	city: aLoc.City,
+	state: aLoc.State,
+	zipcode: aLoc.Zip,
+        */
+        });
+      rendering += '</div></div>';
+      return rendering;
+      }
+
+    let stateNames = [
+      '', 'Alabama', 'Alaska', '', 'Arizona', 'Arkansas', 'California', '', 'Colorado', 'Connecticut',
+      'Delaware', '', 'Florida', 'Georgia', '', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa',
+      'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri',
+      'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio',
+      'Oklahoma', 'Oregon', 'Pennsylvania', '', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah',
+      'Vermont', 'Virginia', '', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'
+      ];
+    let stateCodes = [
+      '', 'AL', 'AK', '', 'AZ', 'AR', 'CA', '', 'CO', 'CT',
+      'DE', '', 'FL', 'GA', '', 'HI', 'ID', 'IL', 'IN', 'IA',
+      'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO',
+      'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH',
+      'OK', 'OR', 'PA', '', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT',
+      'VT', 'VA', '', 'WA', 'WV', 'WI', 'WY'
+      ];
+    function lookupStateCode(aGeoID){
+      return stateCodes[aGeoID];
+      }
+
+    </script>
+
+  </body>
+</html>
