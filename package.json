@@ -10,6 +10,8 @@
   "license": "ISC",
   "dependencies": {
     "d3": "^4.6.0",
-    "lodash": "^4.17.4"
+    "gulp-util": "^3.0.8",
+    "lodash": "^4.17.4",
+    "vinyl-ftp": "^0.6.0"
   }
 }
